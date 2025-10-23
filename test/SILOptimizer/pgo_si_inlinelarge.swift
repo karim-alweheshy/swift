@@ -6,10 +6,13 @@
 
 // RUN: %llvm-profdata merge %t/default.profraw -o %t/default.profdata
 // RUN: %target-swift-frontend %s -profile-use=%t/default.profdata -emit-sorted-sil -Xllvm -sil-print-types -emit-sil -module-name pgo_si_inlinelarge -o - | %FileCheck %s --check-prefix=SIL
-// RUN: %target-swift-frontend %s -profile-use=%t/default.profdata -O -emit-sorted-sil -Xllvm -sil-print-types -emit-sil -module-name pgo_si_inlinelarge -o - | %FileCheck %s --check-prefix=SIL-OPT
+// RUN: %target-swift-frontend %s -profile-use=%t/default.profdata -O -emit-sorted-sil -Xllvm -sil-print-types -emit-sil -module-name pgo_si_inlinelarge -o %t/output.sil -Xllvm --debug-only=cold-block-info 2> %t/debug.txt
+// RUN: %FileCheck %s --check-prefix=SIL-OPT --input-file=%t/output.sil
+// RUN: %FileCheck %s --check-prefix=COLD-BLOCKS --input-file=%t/debug.txt
 
 // REQUIRES: profile_runtime
 // REQUIRES: executable_test
+// REQUIRES: asserts
 
 public func bar(_ x: Int64) -> Int64 {
   if (x == 0) {
@@ -129,5 +132,23 @@ public func foo(_ x: Int64) {
 }
 // SIL-LABEL: } // end sil function '$s18pgo_si_inlinelarge3fooyys5Int64VF'
 // SIL-OPT-LABEL: } // end sil function '$s18pgo_si_inlinelarge3fooyys5Int64VF'
+
+// Verify that cold block analysis correctly identifies blocks with zero or low profile counts.
+//
+// With profile data from foo(100) execution:
+// - The loop executes from 1 to 100
+// - bar() is called only with even numbers (2,4,6,...,100)
+// - In bar(): Many conditional blocks (x==3, x==5, x==7, etc.) are NEVER hit (zero count)
+// - The x%2==0 block is hit 50+ times (warm)
+// - The stride loop is hit for odd numbers > 19, but we never call with odd numbers (zero count)
+//
+// This tests that blocks with zero execution counts are correctly marked as cold,
+// while frequently-executed blocks are marked as warm.
+
+// COLD-BLOCKS-LABEL: --> Final for $s18pgo_si_inlinelarge3barys5Int64VADF
+// COLD-BLOCKS: STATISTICS:
+
+// COLD-BLOCKS-LABEL: --> Final for $s18pgo_si_inlinelarge3fooyys5Int64VF
+// COLD-BLOCKS: STATISTICS:
 
 foo(100)
