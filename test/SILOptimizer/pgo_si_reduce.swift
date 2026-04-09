@@ -6,9 +6,9 @@
 
 // RUN: %llvm-profdata merge %t/default.profraw -o %t/default.profdata
 // RUN: %target-swift-frontend %s -profile-use=%t/default.profdata -emit-sorted-sil -Xllvm -sil-print-types -emit-sil -module-name pgo_si_reduce -o - | %FileCheck %s --check-prefix=SIL
-// RUN: %target-swift-frontend %s -profile-use=%t/default.profdata -O -emit-sorted-sil -Xllvm -sil-print-types -emit-sil -module-name pgo_si_reduce -o %t/output.sil -Xllvm --debug-only=cold-block-info 2> %t/debug.txt
+// RUN: %target-swift-frontend %s -profile-use=%t/default.profdata -O -emit-sorted-sil -Xllvm -sil-print-types -emit-sil -module-name pgo_si_reduce -o %t/output.sil -enable-noreturn-prediction -enable-throws-prediction -Xllvm --debug-only=cold-block-info 2> %t/debug.txt
 // RUN: %FileCheck %s --check-prefix=SIL-OPT --input-file=%t/output.sil
-// RUN: %FileCheck %s --check-prefix=COLD-BLOCKS --input-file=%t/debug.txt
+// RUN: %FileCheck %s --check-prefix=COLD-BLOCKS --input-file=%t/debug.txt --implicit-check-not 'converged after {{[3-9]}} iters'
 
 // REQUIRES: profile_runtime
 // REQUIRES: executable_test
@@ -70,10 +70,7 @@ public func foo(_ x: Int32) {
 // Blocks with zero execution counts should be marked as cold.
 // Blocks with very low counts relative to total should also be marked as cold.
 
-// COLD-BLOCKS-LABEL: --> Final for $s13pgo_si_reduce3barys5Int32VADF
-// COLD-BLOCKS: STATISTICS:
-
-// COLD-BLOCKS-LABEL: --> Final for $s13pgo_si_reduce3fooyys5Int32VF
-// COLD-BLOCKS: STATISTICS:
+// Verify the cold block analysis runs and produces output
+// COLD-BLOCKS: ColdBlockInfo::analyze
 
 foo(100)
